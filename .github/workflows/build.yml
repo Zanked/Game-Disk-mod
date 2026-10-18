@@ -1,0 +1,75 @@
+
+name: Build NeoForge Mod
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract source ZIP
+        shell: bash
+        run: |
+          set -e
+
+          ZIP=$(find . -maxdepth 3 -type f \
+            -iname '*NeoForge-source*.zip' \
+            -print -quit)
+
+          if [ -n "$ZIP" ]; then
+            echo "Extracting: $ZIP"
+            mkdir -p extracted
+            unzip -oq "$ZIP" -d extracted
+          fi
+
+          # Find the actual Gradle project
+          WRAPPER=$(find . -type f -name gradlew \
+            -not -path './.git/*' \
+            -not -path './.github/*' \
+            -print -quit)
+
+          if [ -z "$WRAPPER" ]; then
+            echo "ERROR: gradlew not found."
+            echo "Repository files:"
+            find . -maxdepth 4 -type f | head -200
+            exit 1
+          fi
+
+          PROJECT_DIR=$(dirname "$WRAPPER")
+          PROJECT_DIR=$(realpath "$PROJECT_DIR")
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Found project: $PROJECT_DIR"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Build mod
+        shell: bash
+        run: |
+          set -e
+          cd "$PROJECT_DIR"
+          chmod +x gradlew
+          ./gradlew --no-daemon build
+
+      - name: Upload JAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameDiscsPlus-NeoForge-1.21.1
+          path: |
+            **/build/libs/*.jar
+          if-no-files-found: error
